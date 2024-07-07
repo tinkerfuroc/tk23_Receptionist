@@ -18,11 +18,12 @@
 
 import rclpy
 from tts_interfaces.action import TTSAction
+from tinker_vision_msgs.srv import FaceRegister
 from yasmin import CbState
 from yasmin import State
 from yasmin import Blackboard
 from yasmin import StateMachine
-from yasmin_ros import ActionState
+from yasmin_ros import ActionState,ServiceState
 from yasmin_ros.basic_outcomes import SUCCEED, ABORT, CANCEL
 from yasmin_viewer import YasminViewerPub
 
@@ -31,6 +32,7 @@ class Person:
         self.id = id
         self.name = name
         self.drink = drink
+        self.rec_info = {} # face recognition info (include age and gender)
 
     def desp_gen(self):
         return f"This is {self.name}, {self.name}'s favourite drink is {self.drink}"
@@ -48,41 +50,90 @@ def print_result(blackboard: Blackboard) -> str:
     print(f"Result: {blackboard.tts_res}")
     return SUCCEED
 
+# # TODO: implement Register
+# class RegisterState(ActionState):
+#     def __init__(self) -> None:
+#         super().__init__(
+#             TTSAction,  # action type
+#             "/tts_command",  # action name
+#             self.create_goal_handler,  # cb to create the goal
+#             ['start_move'],  # outcomes. Includes (SUCCEED, ABORT, CANCEL)
+#             self.response_handler  # cb to process the response
+#         )
+
+#     def create_goal_handler(self, blackboard: Blackboard) -> TTSAction.Goal:
+#         if blackboard.person_cnt > 0: # Guest
+#             print("Begin register Guest...")
+#             # TODO: CHANGE NAME
+#             set_tts(blackboard, blackboard.active_person.ensure_gen())
+#             blackboard.location_lable = 1
+#         else: # Host
+#             set_tts(blackboard, "Begin register Host...")
+#             blackboard.location_lable = 0
+
+#         blackboard.active_location = blackboard.locations[blackboard.location_lable]
+
+#         goal = TTSAction.Goal()
+#         goal.target_string = blackboard.tts_target
+#         print('Registering...')
+#         return goal
+    
+#     def response_handler(
+#         self,
+#         blackboard: Blackboard,
+#         response: TTSAction.Result
+#     ) -> str:
+        
+#         blackboard.tts_res = response.finished
+#         return 'start_move'
+
+
 # TODO: implement Register
-class RegisterState(ActionState):
+class RegisterState(ServiceState):
     def __init__(self) -> None:
         super().__init__(
-            TTSAction,  # action type
-            "/tts_command",  # action name
-            self.create_goal_handler,  # cb to create the goal
+            FaceRegister,  # srv type
+            "/vision/face/register",  # service name
+            self.create_request_handler,  # cb to create the request
             ['start_move'],  # outcomes. Includes (SUCCEED, ABORT, CANCEL)
             self.response_handler  # cb to process the response
         )
 
-    def create_goal_handler(self, blackboard: Blackboard) -> TTSAction.Goal:
-        if blackboard.person_cnt > 0: # Guest
-            print("Begin register Guest...")
-            # TODO: CHANGE NAME
-            set_tts(blackboard, blackboard.active_person.ensure_gen())
-            blackboard.location_lable = 1
-        else: # Host
-            set_tts(blackboard, "Begin register Host...")
-            blackboard.location_lable = 0
+    def create_request_handler(self, blackboard: Blackboard) -> FaceRegister.Request:
 
-        blackboard.active_location = blackboard.locations[blackboard.location_lable]
 
-        goal = TTSAction.Goal()
-        goal.target_string = blackboard.tts_target
-        print('Registering...')
-        return goal
+        # TODO: CHANGE STATE for register/match
+        if blackboard.face_state == 0: # register
+            if blackboard.person_cnt > 0: # Guest
+                print("Begin register Guest...")
+                # TODO: CHANGE NAME
+                set_tts(blackboard, blackboard.active_person.ensure_gen())
+                blackboard.location_lable = 1
+            else: # Host
+                set_tts(blackboard, "Begin register Host...")
+                blackboard.location_lable = 0
+            blackboard.active_location = blackboard.locations[blackboard.location_lable]
+
+            req = FaceRegister.Request()
+            req.state = 0
+
+        elif blackboard.face_state == 1: # match
+            req = FaceRegister.Request()
+            req.state = 1
+            print('Matching...')
+        
+        return req
     
     def response_handler(
         self,
         blackboard: Blackboard,
-        response: TTSAction.Result
+        response: FaceRegister.Response
     ) -> str:
         
-        blackboard.tts_res = response.finished
+        blackboard.face_suceess = response.success
+        blackboard.id = response.id
+        blackboard.age = response.rec_info[0]
+        blackboard.gender = response.rec_info[1]
         return 'start_move'
 
 # TODO: implement Move
