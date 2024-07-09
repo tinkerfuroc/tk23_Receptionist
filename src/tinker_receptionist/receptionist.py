@@ -73,7 +73,7 @@ class TTSState(ActionState):
             TTSAction,  # action type
             "/tts_command",  # action name
             self.create_goal_handler,  # cb to create the goal
-            ['register', 'move', 'introduce_host'],  # outcomes. 
+            ['register', 'move', 'tts', 'done'],  # outcomes. 
             self.response_handler  # cb to process the response
         )
 
@@ -91,12 +91,20 @@ class TTSState(ActionState):
         if blackboard.after_tts == 'register':
             return 'register'
         elif blackboard.after_tts == 'move':
-            return 'move'
+            if  blackboard.person_cnt == 2:
+                return 'done'
+            else: 
+                return 'move'
         elif blackboard.after_tts == 'introduce_host':
             set_tts(blackboard, blackboard.active_persons['Host'].desp_gen())
-            blackboard.after_tts = None # Wait until introduction finished
-            return 'introduce_host'
-        
+            blackboard.active_location == 'door'
+            blackboard.after_tts = 'move' # Wait until introduction finished
+            return 'tts'
+        elif blackboard.after_tts == 'introduce_guest1':
+            set_tts(blackboard, blackboard.active_persons['Guest1'].desp_gen())
+            blackboard.after_tts = 'introduce_host'
+            return 'tts'
+
 ########### Register State ##########
 class RegisterState(ServiceState):
     def __init__(self) -> None:
@@ -174,7 +182,10 @@ class MoveState(ActionState):
             return 'detection'
         elif blackboard.active_location == 'host_position':
             set_tts(blackboard, blackboard.persons[blackboard.active_id].desp_gen())
-            blackboard.after_tts = 'introduce_host' # Introduce host to guest
+            if blackboard.person_cnt == 2:
+                 blackboard.after_tts = 'introduce_guest1'
+            else:
+                blackboard.after_tts = 'introduce_host' # Introduce host to guest
             return 'tts'
         
 ########### ASR State ##########
@@ -216,7 +227,7 @@ class DetectionState(ServiceState):
             ObjectDetection,  # srv type
             "/object_detection_service",  # service name
             self.create_request_handler,  # cb to create the request
-            ['asr', 'done'],  # outcomes.
+            ['move'],  # outcomes.
             self.response_handler  # cb to process the response
         )
 
@@ -254,3 +265,82 @@ class DetectionState(ServiceState):
             blackboard.active_location = 'host_position'
             return 'move'    
 
+# main
+def main():
+
+    print("yasmin_action_client_demo")
+
+    # init ROS 2
+    rclpy.init()
+
+    # create a FSM
+    sm = StateMachine(outcomes=["done"])
+
+    # add states
+    sm.add_state(
+        "init_task",
+        InitState(),
+        transitions={
+            "tts": "TTS"
+        }
+    )
+
+    sm.add_state(
+        "TTS",
+        TTSState(),
+        transitions={
+            'register': 'Register',
+            'move': 'Move',
+            'tts': 'TTS'
+        }
+    )
+
+    sm.add_state(
+        "ASR",
+        ASRState(),
+        transitions={
+            'move': 'Move'
+        }
+    )
+
+    sm.add_state(
+        "Register",
+        RegisterState(),
+        transitions={
+            'asr': 'ASR',
+            'move': 'Move'
+        }
+    )
+
+    sm.add_state(
+        "Move",
+        MoveState(),
+        transitions={
+            'tts': 'TTS',
+            'register': "Register",
+            'detection': "Detection"
+        }
+    )
+
+    sm.add_state(
+        "Detection",
+        MoveState(),
+        transitions={
+            'move': "Move"
+        }
+    )
+    
+
+    # pub FSM info
+    YasminViewerPub("YASMIN_ACTION_CLIENT_DEMO", sm)
+
+    # execute FSM
+    outcome = sm()
+    print(outcome)
+
+    # shutdown ROS 2
+    rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
