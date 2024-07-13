@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rclpy
 from tts_interfaces.action import TTSAction
 from asr_communication_interface.action import Asrcommand
