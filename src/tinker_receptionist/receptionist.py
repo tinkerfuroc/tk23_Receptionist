@@ -2,6 +2,7 @@ import rclpy
 from tts_interfaces.action import TTSAction
 from asr_communication_interface.action import Asrcommand
 from tinker_vision_msgs.srv import FaceRegister, ObjectDetection
+from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion
 from yasmin import CbState
 from yasmin import State
 from yasmin import Blackboard
@@ -45,21 +46,23 @@ class InitState(State):
         # active_persons: dictionary with host/guest1/guest2
         blackboard.active_persons = {}
         # locations: dictionary with coordinates
-        blackboard.locations = {"door": (), "sofa": ()}
+        blackboard.locations = {
+                                "door": Pose(position=Point(x=-1.0319, y=4.5870 , z=0.0),orientation=Quaternion(x=0.0, y=0.0, z=0.7030, w= 0.7111)),  # registeration pose
+                                "sofa": Pose(position=Point(x=2.9052, y=3.6829, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.6892, w=0.7245))   # observation pose
+                                }
         blackboard.person_cnt = 0
         blackboard.active_location = blackboard.locations["door"]
 
-        
-
+        # transformation of the seat locations
         blackboard.seats_location = [
-            (0, 0, 0),
-            (0, 0, 0),
-            (0, 0, 0),
+            (2.1495, 5.6036, 0.0),   #left
+            (2.9498, 5.5726, 0.0),   #middle
+            (3.8365, 5.5462, 0.0),   #right
         ]
         blackboard.seats_occupied = [-1, -1, -1]
         blackboard.seats_observation_poses = [
-            (0, 0, 0, 0),
-            (0, 0, 0, 0),
+            Pose(position=Point(x=2.9052, y=3.6829, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.6892, w=0.7245)),
+            Pose(position=Point(x=0, y=0, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0, w=1)),
         ]
 
         set_tts(blackboard, "Hello! My name is Tinker. I'm going to welcome the guests!")
