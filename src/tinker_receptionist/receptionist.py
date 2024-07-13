@@ -11,7 +11,6 @@ from yasmin import StateMachine
 from yasmin_ros import ActionState,ServiceState
 from yasmin_ros.basic_outcomes import SUCCEED, ABORT, CANCEL
 from yasmin_viewer import YasminViewerPub
-from nav2_msgs.action import NavigateToPose
 import numpy as np
 
 class Person:
@@ -158,26 +157,29 @@ class RegisterState(ServiceState):
 class MoveState(ActionState):
     def __init__(self) -> None:
         super().__init__(
-            NavigateToPose,
-            "/navigate_to_pose",
+            TTSAction,  # action type
+            "/tts_command",  # action name
             self.create_goal_handler,  # cb to create the goal
             ['register', 'detection', 'tts'], 
             self.response_handler  # cb to process the response
         )
-    
-    def create_goal_handler(self, blackboard: Blackboard) -> NavigateToPose.Goal:
-        goal = NavigateToPose.Goal()
-        goal.pose.pose = blackboard.locations[blackboard.active_location]
-        goal.pose.header.frame_id = "map"
+
+    def create_goal_handler(self, blackboard: Blackboard) -> TTSAction.Goal:
+        if blackboard.active_location == 'door':
+            blackboard.person_cnt += 1
+
+        # TODO: Change to navigation goal
+        goal = TTSAction.Goal()
+        goal.target_string = blackboard.tts_target
         return goal
     
     def response_handler(
         self,
         blackboard: Blackboard,
-        response: NavigateToPose.Result
+        response: TTSAction.Result
     ) -> str:
         
-        blackboard.nav_res = response.result
+        blackboard.tts_res = response.finished
         if blackboard.active_location == 'door':
             return 'register'
         elif blackboard.active_location == 'first_observation' or blackboard.active_location == 'second_observation':
