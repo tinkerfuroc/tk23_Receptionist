@@ -47,6 +47,8 @@ class InitState(State):
         blackboard.persons = {}
         # active_persons: dictionary with host/guest1/guest2
         blackboard.active_persons = {}
+        blackboard.active_rec_info = {}
+        blackboard.active_id = None
         # locations: dictionary with coordinates
         blackboard.locations = {
                                 "door": Pose(position=Point(x=-1.0319, y=4.5870 , z=0.0),orientation=Quaternion(x=0.0, y=0.0, z=0.7030, w= 0.7111)),  # registeration pose
@@ -56,7 +58,7 @@ class InitState(State):
         blackboard.active_location = blackboard.locations["door"]
 
         # transformation of the seat locations
-        blackboard.seats_location = [
+        blackboard.seats_locations = [
             (2.1495, 5.6036, 0.0),   #left
             (2.9498, 5.5726, 0.0),   #middle
             (3.8365, 5.5462, 0.0),   #right
@@ -64,11 +66,13 @@ class InitState(State):
         blackboard.seats_occupied = [-1, -1, -1]
         blackboard.seats_observation_poses = [
             Pose(position=Point(x=2.9052, y=3.6829, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.6892, w=0.7245)),
-            Pose(position=Point(x=0, y=0, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0, w=1)),
+            Pose(position=Point(x=0.0, y=0.0, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)),
         ]
 
         set_tts(blackboard, "Hello! My name is Tinker. I'm going to welcome the guests!")
         blackboard.after_tts = 'register' # Register Host first
+
+        blackboard.face_state = 0
         return "tts"
 
 ########### TTS State ##########
@@ -83,6 +87,7 @@ class TTSState(ActionState):
         )
 
     def create_goal_handler(self, blackboard: Blackboard) -> TTSAction.Goal:
+        print("TTS state")
         goal = TTSAction.Goal()
         goal.target_string = blackboard.tts_target
         return goal
@@ -102,7 +107,8 @@ class TTSState(ActionState):
                 return 'move'
         elif blackboard.after_tts == 'introduce_host':
             set_tts(blackboard, blackboard.active_persons['Host'].desp_gen())
-            blackboard.active_location == 'door'
+            print("Set target location to door")
+            blackboard.active_location = 'door'
             blackboard.after_tts = 'move' # Wait until introduction finished
             return 'tts'
         elif blackboard.after_tts == 'introduce_guest1':
@@ -122,6 +128,7 @@ class RegisterState(ServiceState):
         )
 
     def create_request_handler(self, blackboard: Blackboard) -> FaceRegister.Request:
+        print("Register State")
         req = FaceRegister.Request()
         if blackboard.face_state == 0: # Register
             req.state = 0
@@ -144,7 +151,7 @@ class RegisterState(ServiceState):
         if response.success == False:
             return 'asr'
         else:
-            blackboard.active_id = response.id
+            blackboard.active_id = response.id[0]
             blackboard.active_rec_info = response.rec_info     
             if blackboard.person_cnt == 0: # Host, go to door    
                 blackboard.persons[blackboard.active_id] = Person("Host Name", "Host Drink", blackboard.active_rec_info)
@@ -164,8 +171,13 @@ class MoveState(ActionState):
             ['register', 'detection', 'tts'], 
             self.response_handler  # cb to process the response
         )
-    
-    def create_goal_handler(self, blackboard: Blackboard) -> NavigateToPose.Goal:
+
+
+    def create_goal_handler(self, blackboard: Blackboard) -> TTSAction.Goal:
+        print("Move State")
+        if blackboard.active_location == 'door':
+            print(f"Person Cnt: {blackboard.person_cnt}")
+            blackboard.person_cnt += 1
         goal = NavigateToPose.Goal()
         goal.pose.pose = blackboard.locations[blackboard.active_location]
         goal.pose.header.frame_id = "map"
@@ -179,14 +191,19 @@ class MoveState(ActionState):
         
         blackboard.nav_res = response.result
         if blackboard.active_location == 'door':
+            print("Going to the door")
             return 'register'
         elif blackboard.active_location == 'first_observation' or blackboard.active_location == 'second_observation':
+            print("Going to the Observation")
             return 'detection'
         elif blackboard.active_location == 'host_position':
+            print("Going to the Host position")
             set_tts(blackboard, blackboard.persons[blackboard.active_id].desp_gen())
             if blackboard.person_cnt == 2:
+                 print("I'm going to introduce guest1")
                  blackboard.after_tts = 'introduce_guest1'
             else:
+                print("I'm going to introduce host")
                 blackboard.after_tts = 'introduce_host' # Introduce host to guest
             return 'tts'
         
@@ -202,6 +219,7 @@ class ASRState(ActionState):
         )
 
     def create_goal_handler(self, blackboard: Blackboard) -> Asrcommand.Goal:
+        print("ASR State")
         goal = Asrcommand.Goal()
         goal.trigger = True
         return goal
@@ -212,6 +230,7 @@ class ASRState(ActionState):
         response: Asrcommand.Result
     ) -> str:
         
+
         blackboard.persons[blackboard.active_id] = Person(response.name, response.drink, blackboard.active_rec_info)
         if blackboard.person_cnt == 1:
             blackboard.active_persons['Guest1'] = blackboard.persons[blackboard.active_id]
@@ -227,16 +246,17 @@ class DetectionState(ServiceState):
     def __init__(self) -> None:
         super().__init__(
             ObjectDetection,  # srv type
-            "/object_detection_service",  # service name
+            "/object_detection",  # service name
             self.create_request_handler,  # cb to create the request
             ['move'],  # outcomes.
             self.response_handler  # cb to process the response
         )
 
     def create_request_handler(self, blackboard: Blackboard) -> ObjectDetection.Request:
+        print("Detection State")
         req = ObjectDetection.Request()
-        req.flags = ''
-        req.target_frame = 'map'    # obj.centroid frame
+        req.mode = ''
+        # req.target_frame = 'map'    # obj.centroid frame
         return req
     
     def response_handler(
@@ -270,7 +290,7 @@ class DetectionState(ServiceState):
 # main
 def main():
 
-    print("yasmin_action_client_demo")
+    print("Receptionist")
 
     # init ROS 2
     rclpy.init()
@@ -326,7 +346,7 @@ def main():
 
     sm.add_state(
         "Detection",
-        MoveState(),
+        DetectionState(),
         transitions={
             'move': "Move"
         }
