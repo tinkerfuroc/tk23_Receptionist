@@ -51,8 +51,10 @@ class InitState(State):
         blackboard.active_id = None
         # locations: dictionary with coordinates
         blackboard.locations = {
-                                "door": Pose(position=Point(x=-1.0319, y=4.5870 , z=0.0),orientation=Quaternion(x=0.0, y=0.0, z=0.7030, w= 0.7111)),  # registeration pose
-                                "sofa": Pose(position=Point(x=2.9052, y=3.6829, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.6892, w=0.7245))   # observation pose
+                                "door": Pose(position=Point(x=3.58, y=3.88 , z=0.0),orientation=Quaternion(x=0.0, y=0.0, z=0.011578, w= 0.999932)),  # registeration pose
+                                "sofa": Pose(position=Point(x=3.7841, y=4.644, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.720702, w=0.69324)),   # observation pose
+                                'first_observation': Pose(position=Point(x=2.72063, y=4.8278, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.37335, w= 0.927686)),
+                                'second_observation': Pose(position=Point(x=2.72063, y=4.8278, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.37335, w= 0.927686))
                                 }
         blackboard.person_cnt = 0
         blackboard.active_location = blackboard.locations["door"]
@@ -65,7 +67,7 @@ class InitState(State):
         ]
         blackboard.seats_occupied = [-1, -1, -1]
         blackboard.seats_observation_poses = [
-            Pose(position=Point(x=2.9052, y=3.6829, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.6892, w=0.7245)),
+            Pose(position=Point(x=2.72063, y=4.8278, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.37335, w= 0.927686)),
             Pose(position=Point(x=0.0, y=0.0, z=0.0), orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)),
         ]
 
@@ -123,7 +125,7 @@ class RegisterState(ServiceState):
             FaceRegister,  # srv type
             "/vision/face/register",  # service name
             self.create_request_handler,  # cb to create the request
-            ['asr', 'move'],  # outcomes.
+            ['asr', 'move', 'fail'],  # outcomes.
             self.response_handler  # cb to process the response
         )
 
@@ -149,7 +151,7 @@ class RegisterState(ServiceState):
         response: FaceRegister.Response
     ) -> str:
         if response.success == False:
-            return 'asr'
+            return 'fail'
         else:
             blackboard.active_id = response.id[0]
             blackboard.active_rec_info = response.rec_info     
@@ -255,8 +257,7 @@ class DetectionState(ServiceState):
     def create_request_handler(self, blackboard: Blackboard) -> ObjectDetection.Request:
         print("Detection State")
         req = ObjectDetection.Request()
-        req.mode = ''
-        # req.target_frame = 'map'    # obj.centroid frame
+        req.flags = ''
         return req
     
     def response_handler(
@@ -330,7 +331,8 @@ def main():
         RegisterState(),
         transitions={
             'asr': 'ASR',
-            'move': 'Move'
+            'move': 'Move',
+            'fail': 'Register'
         }
     )
 
